@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>D3 Network Visualization</title>
+
+  <!-- Load D3 -->
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+
+  <style>
+    body {
+      background-color: #d6e6f5;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    svg {
+      background-color: #ffffff;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    path.link {
+      fill: none;
+      stroke-width: 2px;
+      opacity: 0.7;
+    }
+
+    circle {
+      stroke: #ffffff;
+      stroke-width: 2px;
+    }
+
+    .node-label {
+      font-weight: 600;
+      font-size: 13px;
+      fill: #333333;
+    }
+
+    #credit {
+      font-size: 12px;
+      fill: #555;
+    }
+  </style>
+</head>
+<body>
+
+<script>
+d3.dsv(",", "board_games.csv", function(d) {
+  return {
+    source: d.source,
+    target: d.target,
+    value: +d.value
+  };
+}).then(function(data) {
+
+  var links = data;
+  var nodes = {};
+
+  links.forEach(function(link) {
+    link.source = nodes[link.source] || (nodes[link.source] = { name: link.source });
+    link.target = nodes[link.target] || (nodes[link.target] = { name: link.target });
+  });
+
+  var nodeDegree = {};
+
+  links.forEach(function(link) {
+    nodeDegree[link.source.name] = (nodeDegree[link.source.name] || 0) + 1;
+    nodeDegree[link.target.name] = (nodeDegree[link.target.name] || 0) + 1;
+  });
+
+  var colorScale = d3.scaleSequential(d3.interpolateBlues)
+      .domain(d3.extent(Object.values(nodeDegree)));
+
+  var radiusScale = d3.scaleSqrt()
+      .domain(d3.extent(Object.values(nodeDegree)))
+      .range([6, 18]);
+
+  var width = 1100, height = 700;
+
+  var force = d3.forceSimulation()
+      .nodes(Object.values(nodes))
+      .force("link", d3.forceLink(links).distance(120))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force("charge", d3.forceManyBody().strength(-300))
+      .alphaTarget(0.5)
+      .on("tick", tick);
+
+  var svg = d3.select("body").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+  svg.append("text")
+      .attr("id", "credit")
+      .attr("x", width - 15)
+      .attr("y", height - 15)
+      .attr("text-anchor", "end")
+      .text("GT Username: xwang3295");
+
+  var path = svg.append("g")
+      .selectAll("path")
+      .data(links)
+      .enter().append("path")
+      .attr("class", "link")
+      .style("stroke", d => d.value === 0 ? "#999" : "#6abf69")
+      .style("stroke-dasharray", d => d.value === 0 ? "none" : "5,5");
+
+  var node = svg.selectAll(".node")
+      .data(force.nodes())
+      .enter().append("g")
+      .attr("class", "node")
+      .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended))
+      .on("dblclick", unpinNode);
+
+  node.append("circle")
+      .attr("r", d => radiusScale(nodeDegree[d.name]))
+      .style("fill", d => colorScale(nodeDegree[d.name]));
+
+  node.append("text")
+      .attr("class", "node-label")
+      .attr("dx", 12)
+      .attr("dy", 4)
+      .text(d => d.name);
+
+  function tick() {
+    path.attr("d", d => `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`);
+
+    node.attr("transform", d => `translate(${d.x},${d.y})`);
+  }
+
+  function dragstarted(d) {
+    if (!d3.event.active) force.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+
+  function dragged(d) {
+    d.fx = d3.event.x;
+    d.fy = d3.event.y;
+  }
+
+  function dragended(d) {
+    if (!d3.event.active) force.alphaTarget(0);
+    d.pinned = !d.pinned;
+    if (!d.pinned) {
+      d.fx = null;
+      d.fy = null;
+    }
+    d3.select(this).select("circle")
+      .style("fill", d.pinned ? "#ff7f7f" : colorScale(nodeDegree[d.name]));
+  }
+
+  function unpinNode(d) {
+    d.fx = null;
+    d.fy = null;
+    d.pinned = false;
+    d3.select(this).select("circle").style("fill", colorScale(nodeDegree[d.name]));
+    force.alphaTarget(0.3).restart();
+  }
+
+}).catch(console.error);
+</script>
+
+</body>
+</html>
